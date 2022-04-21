@@ -16,6 +16,7 @@
 #include <source_location> /* source_location current */
 #include <fmt/core.h>
 #include <fmt/chrono.h>
+#include <fmt/color.h> /* fmt::color */
 #include <fmt/printf.h> /* fmt::sprntf */
 #include <fmt/format.h> /* fmt::format */
 
@@ -61,6 +62,7 @@ const char*  APP_NAME    = "@DEFAULT_APP_NAME@";
 const ELevel ERROR_LEVEL = ELevel::@DEFAULT_ERROR_LEVEL@;
 const bool   SYSLOG_FLAG = @DEFAULT_SYSLOG_FLAG@;
 const bool   SYSOUT_FLAG = @DEFAULT_SYSOUT_FLAG@;
+const bool   COLOR_FLAG  = @DEFAULT_COLOR_FLAG@;
 
 class Location {
 public:
@@ -74,13 +76,24 @@ public:
 
 inline std::map<const ELevel,
     const std::string> strlevel { 
-    { ELevel::none,  "NONE" },
+    { ELevel::none,  "NONE " },
     { ELevel::fatal, "FATAL" }, 
     { ELevel::error, "ERROR" }, 
-    { ELevel::warn,  "WARN" },
-    { ELevel::info,  "INFO" }, 
+    { ELevel::warn,  "WARN " },
+    { ELevel::info,  "INFO " }, 
     { ELevel::debug, "DEBUG" }, 
     { ELevel::trace, "TRACE" },
+};
+
+inline std::map<const ELevel, 
+    const fmt::color> colorlevel {
+    { ELevel::none,  fmt::color::white },
+    { ELevel::fatal, fmt::color::fuchsia }, 
+    { ELevel::error, fmt::color::orange_red }, 
+    { ELevel::warn,  fmt::color::yellow },
+    { ELevel::info,  fmt::color::lime }, 
+    { ELevel::debug, fmt::color::light_sea_green }, 
+    { ELevel::trace, fmt::color::gray },
 };
 
 #ifdef _MSVC_
@@ -96,7 +109,7 @@ inline std::map<const ELevel,
     { ELevel::trace, EVENTLOG_SUCCESS },
 };
 #else
-    #include <syslog.h>
+#include <syslog.h>
 inline std::map<const ELevel, 
     const int> syslevel { 
     { ELevel::none,  LOG_EMERG },
@@ -115,6 +128,7 @@ enum class LoggerId : uint8_t {
     depth,  /* Logrotate limit */
     syslog, /* Print into syslog */
     sysout, /* Print into stdout stderr */
+    color,  /* Colored console output */
 };
 
 /* Streamp pool */
@@ -136,6 +150,7 @@ public:
     std::optional<std::string> key;
     bool is_sysout;
     bool is_syslog;
+    bool is_color;
 };
 
 class ILogger {
@@ -352,19 +367,22 @@ class Logger : public ILogger {
             strlevel[level], name, src.line(),
             message);
         if (_pool->is_sysout == true) {
+            auto color = _pool->is_color
+               ? fmt::fg(colorlevel[level])
+               : fmt::fg(fmt::color::white);
             switch (level) {
             case ELevel::fatal:
-                std::cerr << buffer;
+                std::cerr << fmt::format(color, buffer);
                 std::cout.flush();
                 exit(EXIT_FAILURE);
             case ELevel::error:
-                std::cerr << buffer;
+                std::cerr << fmt::format(color, buffer);
                 break;
             case ELevel::warn:
             case ELevel::info:
             case ELevel::debug:
             default:
-                std::cout << buffer;
+                std::cout << fmt::format(color, buffer);
                 break;
             }
         }
@@ -386,6 +404,7 @@ class Logger : public ILogger {
             }
             if (lp != nullptr &&
                 lp->key.has_value() == true &&
+                sp->size > 0 &&
                 sp->_size > sp->size) {
                 _rotate(sp, lp->key.value());
             }
@@ -428,6 +447,9 @@ public:
             case LoggerId::sysout:
                 _pool->is_sysout = std::any_cast<bool>(value);
                 return true;
+            case LoggerId::color:
+                _pool->is_color = std::any_cast<bool>(value);
+                return true;
             }
             /* Local config */
             if (_pool->key.has_value() == false) {
@@ -458,19 +480,24 @@ public:
 
     Logger(ELevel level = ELevel::warn,
         bool is_syslog = SYSLOG_FLAG,
-        bool is_sysout = SYSOUT_FLAG) {
+        bool is_sysout = SYSOUT_FLAG,
+        bool is_color = COLOR_FLAG) {
         _pool = std::make_shared<LoggerPool>(
 #ifdef _MSVC_
             INVALID_HANDLE_VALUE,
 #endif
-            level, std::nullopt, is_sysout);
+            level, std::nullopt, 
+            is_sysout, is_syslog, 
+            is_color);
         set(LoggerId::syslog, is_syslog);
+
     }
 
     Logger(std::filesystem::path file, 
         ELevel level = ELevel::warn, 
         bool is_syslog = SYSLOG_FLAG,
-        bool is_sysout = SYSOUT_FLAG)
+        bool is_sysout = SYSOUT_FLAG,
+        bool is_color = COLOR_FLAG)
         : Logger(level, is_syslog, is_sysout) {
         std::error_code ec;
         if (std::filesystem::path dir = file.parent_path();

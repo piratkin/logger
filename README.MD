@@ -1,103 +1,134 @@
-# Simple and minimalistic logger
+# Simple & minimalistic C++ logger library
 
-## Objective of the project
+## Features
 
-Main goals I wanted to achieve in this project:
+ - Minimalistic design (~500 lines of code)
+ - Use more than one instance
+ - Minimum third-party dependencies
+ - Cross-platform (`gcc`, `mingw`, `msvc`)
+ - Modern (`c++20`)
+ - Thread-safe
+ - Header only
+ - Simple integration (`cmake`)
+ - System log (`Windows`/`Linux`)
+ - Three most used `APIs` (`printf`, `format`, `ostream`)
+ - Asynchronous lazy writing in a separate thread
+ - Colored console output supported
+ - Log file rotation (by size)
 
-### Minimalistic design.
-
-This means that this is not a universal solution.
-
-### Minimum third-party dependencies.
- 
-Used: `STL`, `fmt`, `System API`, `C/C++` language extensions (for `fmt`).
-
-In the future, `fmt` is likely to become part of the `STL` standard library.
- 
-### Cross-platform.
- 
-Tested on systems: `Windows`, `Linux`, `MSYS2`.
-
-### Modern.
- 
-The latest used language version (C++20), at the current moment.
- 
-### Performance.
- 
-Messages are written in a separate thread. The number of I/O operations is reduced.
-
-## Main Features / Usage.
-
-### Create
-
-First you need to create an object in one of the following ways:
- 
-```c++
-auto loglevel = ELevel::trace;
-bool is_syslog = false; /* put message to system journal */
-bool is_sysout = true; /* print message to stdeout/stderror */
-
-Loggerlog0;
-Logger log9(ELevel::trace);
-Logger log7(ELevel::trace, false, true);
-Logger log1("../log/logfile1.log");
-Logger log2("../log/logfile1.log", ELevel::trace);
-```
-
-## General project settings
+## Defaults
 
 If some parameters were not set when creating the object, then the default values specified in the `CMakeLists.txt` file are used:
  
 ```cmake
 set(DEFAULT_APP_NAME ${CMAKE_PROJECT_NAME})
-set(DEFAULT_ERROR_LEVEL warning)
+set(DEFAULT_ERROR_LEVEL warn)
 set(DEFAULT_SIZE_LIMIT 1048576)
 set(DEFAULT_DEPTH_LIMIT 10)
 set(DEFAULT_SYSOUT_FLAG 1)
 set(DEFAULT_SYSLOG_FLAG 0)
 ```
+
+> This behavior will change in the future!
+
+## How to build
+
+```bash
+$ cmake .. && cmake --build .
+```
+> The library is designed to be easy to add to a cmake project as a git submodule.
+
+## How to use
+
+First you need to create an object in one of the following ways:
  
-### Options
- 
+```c++
+auto loglevel = ELevel::trace;
+bool is_syslog = false; /* also send message to syslog */
+bool is_sysout = true; /* also send message to standart output */
+
+Logger log0;
+Logger log1(ELevel::trace);
+Logger log2(ELevel::trace, false, true);
+Logger log3("../log/logfile1.log");
+Logger log4("../log/logfile1.log", ELevel::trace);
+```
+
+Six levels of logging available: `fatal`, `error`, `warn`, `info`, `debug`, `trace`.
+
+Levels below `error` are printed to standard output, the rest to standard error.
+
+The `fatal` level message prints a message and terminates the program.
+
 After creating the logging object, some parameters can be changed\configured using the `set` method:
  
 ```c++
+/* set error level */
 logf.set(LoggerId::level, ELevel::trace);
+
+/* duplicate message in system log */
 logf.set(LoggerId::syslog, false);
+
+/* duplicate message in standard output */
 logf.set(LoggerId::sysout, true);
+
+/* set logger file size */
 logf.set(LoggerId::size, 1000000);
+
+/* log file storage depth */
 if (logf.set(LoggerId::depth, 32) == false) {
     std::cerr << "Unable set logger depth" << std:endl;
 }
-```
- 
-The `level` parameter - set the error level.
 
-The `size` parameter is the number of characters in the log file, after which the "log rotation" occurs.
+/* set colorful print */
+logf.set(LoggerId::color, true);
+```  
 
-The `depth` parameter is the depth at which log files are stored.
+`set` returns `true` if successful, `false` otherwise.
 
-The `sysout` option is to duplicate the message to standard output when available.
+Some parameters (`size`, `depth`) affect all objects that have the same `logfile`, the rest are individual for each object.
 
-The `syslog` parameter is to duplicate the message in the system log.
+~~When `depth` = 0, then the `logger` will work as a ring buffer, overwriting previous messages.~~
 
-> Some parameters (size, depth) affect all objects that have the same key, the rest are individual for each object.
-
-### Logging
+When `size` = 0, log rotation will be disabled.
 
 You can create a message in three different ways, as you like:
 
 ```c++
 int id = 0;
+
+/* printf style (error) */
 logf.error("%s %s #%d", "hello", "world", ++id);
+
+/* ostream style (warning) */
 logf.warn() << "hello world #" << ++id << std::endl;
-logf.d("{:s} {:s} #{:d}", "hello", "world", id);
+
+/* format style (debug) */
+logf.d("{:s} {:s} #{:d}", "hello", "world", ++id);
 ```
 
-## Additional description
+Output:
+
+```bash
+2022-04-20 18:53:40.911 ERROR [main@10] hello world #1
+2022-04-20 18:53:40.916 WARN  [main@11] hello world #2
+2022-04-20 18:53:40.916 DEBUG [main@12] hello world #3
+```
+
+## Additionally
 
  - Messages to syslog or stdout are sent immediately, which has a bad effect on the performance of the logger, but in my opinion, performance is not the most important feature, and if this is important to you, then something may be wrong with the architecture of the project.
  
  - If you want to get maximum performance, then you should disable `sysout` and `syslog`, make `size` as large as possible and `depth` as small as possible.
  
  - There is no need to close the log, it will happen automatically in case of successful completion of the program.
+
+## TODO:
+ 
+ - [ ] Unit tests
+ - [ ] Flags integrate
+ - [ ] Add samples, project structure
+ - [ ] Stack trace
+ - [ ] Colorful print system out
+ - [ ] Local/UTC timestamp (log file only)
+ - [ ] Color customization and color theme support (light/dark)
