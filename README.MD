@@ -27,6 +27,7 @@ set(DEFAULT_SIZE_LIMIT 1048576)
 set(DEFAULT_DEPTH_LIMIT 10)
 set(DEFAULT_SYSOUT_FLAG 1)
 set(DEFAULT_SYSLOG_FLAG 0)
+set(DEFAULT_COLOR_FLAG 1)
 ```
 
 > This behavior will change in the future!
@@ -46,10 +47,11 @@ First you need to create an object in one of the following ways:
 auto loglevel = ELevel::trace;
 bool is_syslog = false; /* also send message to syslog */
 bool is_sysout = true; /* also send message to standart output */
+bool is_color = true; /* colorful output */
 
 Logger log0;
 Logger log1(ELevel::trace);
-Logger log2(ELevel::trace, false, true);
+Logger log2(ELevel::trace, is_syslog, is_sysout, is_color);
 Logger log3("../log/logfile1.log");
 Logger log4("../log/logfile1.log", ELevel::trace);
 ```
