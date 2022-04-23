@@ -14,6 +14,7 @@
 #include <iostream> /* cerr cout ostream */
 #include <sstream> /* stringstream */
 #include <source_location> /* source_location current */
+#include <tuple> /* tuple */
 #include <fmt/core.h>
 #include <fmt/chrono.h>
 #include <fmt/color.h> /* fmt::color */
@@ -74,51 +75,40 @@ public:
     : format(format), src(src) {}
 };
 
-inline std::map<const ELevel,
-    const std::string> strlevel { 
-    { ELevel::none,  "NONE " },
-    { ELevel::fatal, "FATAL" }, 
-    { ELevel::error, "ERROR" }, 
-    { ELevel::warn,  "WARN " },
-    { ELevel::info,  "INFO " }, 
-    { ELevel::debug, "DEBUG" }, 
-    { ELevel::trace, "TRACE" },
-};
-
 inline std::map<const ELevel, 
-    const fmt::color> colorlevel {
-    { ELevel::none,  fmt::color::white },
-    { ELevel::fatal, fmt::color::fuchsia }, 
-    { ELevel::error, fmt::color::orange_red }, 
-    { ELevel::warn,  fmt::color::yellow },
-    { ELevel::info,  fmt::color::lime }, 
-    { ELevel::debug, fmt::color::light_sea_green }, 
-    { ELevel::trace, fmt::color::gray },
+    std::tuple<const std::string, const fmt::color>> infolevel {
+    {ELevel::none,  {"NONE ", fmt::color::@DEFAULT_NONE_COLOR@}},
+    {ELevel::fatal, {"FATAL", fmt::color::@DEFAULT_FATAL_COLOR@}},
+    {ELevel::error, {"ERROR", fmt::color::@DEFAULT_ERROR_COLOR@}},
+    {ELevel::warn,  {"WARN ", fmt::color::@DEFAULT_WARN_COLOR@}},
+    {ELevel::info,  {"INFO ", fmt::color::@DEFAULT_INFO_COLOR@}},
+    {ELevel::debug, {"DEBUG", fmt::color::@DEFAULT_DEBUG_COLOR@}},
+    {ELevel::trace, {"TRACE", fmt::color::@DEFAULT_TRACE_COLOR@}},
 };
 
 #ifdef _MSVC_
 #include <windows.h>
 inline std::map<const ELevel, 
     const uint16_t> syslevel { 
-    { ELevel::none,  EVENTLOG_SUCCESS },
-    { ELevel::fatal, EVENTLOG_ERROR_TYPE }, 
-    { ELevel::error, EVENTLOG_ERROR_TYPE }, 
-    { ELevel::warn,  EVENTLOG_WARNING_TYPE },
-    { ELevel::info,  EVENTLOG_INFORMATION_TYPE }, 
-    { ELevel::debug, EVENTLOG_SUCCESS }, 
-    { ELevel::trace, EVENTLOG_SUCCESS },
+    {ELevel::none,  EVENTLOG_SUCCESS},
+    {ELevel::fatal, EVENTLOG_ERROR_TYPE}, 
+    {ELevel::error, EVENTLOG_ERROR_TYPE}, 
+    {ELevel::warn,  EVENTLOG_WARNING_TYPE},
+    {ELevel::info,  EVENTLOG_INFORMATION_TYPE}, 
+    {ELevel::debug, EVENTLOG_SUCCESS}, 
+    {ELevel::trace, EVENTLOG_SUCCESS},
 };
 #else
 #include <syslog.h>
 inline std::map<const ELevel, 
     const int> syslevel { 
-    { ELevel::none,  LOG_EMERG },
-    { ELevel::fatal, LOG_CRIT }, 
-    { ELevel::error, LOG_ERR }, 
-    { ELevel::warn,  LOG_WARNING },
-    { ELevel::info,  LOG_NOTICE }, 
-    { ELevel::debug, LOG_INFO }, 
-    { ELevel::trace, LOG_DEBUG },
+    {ELevel::none,  LOG_EMERG},
+    {ELevel::fatal, LOG_CRIT}, 
+    {ELevel::error, LOG_ERR}, 
+    {ELevel::warn,  LOG_WARNING},
+    {ELevel::info,  LOG_NOTICE}, 
+    {ELevel::debug, LOG_INFO}, 
+    {ELevel::trace, LOG_DEBUG},
 };
 #endif
 
@@ -359,30 +349,32 @@ class Logger : public ILogger {
             file.has_stem()) {
             name = file.stem().string();
         }
+        auto&& [strlevel, colorlevel] = infolevel[level];
         std::string buffer = fmt::format(
             "\n{:%F} {:%H:%M:%S} {:s} [{:s}@{:d}] {:s}", 
             time, std::chrono::round<
                 std::chrono::milliseconds>(
                     time.time_since_epoch()),
-            strlevel[level], name, src.line(),
-            message);
+            strlevel, name, src.line(), message);
+        auto format = [&] () -> std::string {
+            if (_pool->is_color == false) return buffer;
+            auto color = fmt::fg(colorlevel);
+            return fmt::format(color, buffer);
+        };
         if (_pool->is_sysout == true) {
-            auto color = _pool->is_color
-               ? fmt::fg(colorlevel[level])
-               : fmt::fg(fmt::color::white);
             switch (level) {
             case ELevel::fatal:
-                std::cerr << fmt::format(color, buffer);
+                std::cerr << format();
                 std::cout.flush();
                 exit(EXIT_FAILURE);
             case ELevel::error:
-                std::cerr << fmt::format(color, buffer);
+                std::cerr << format();
                 break;
             case ELevel::warn:
             case ELevel::info:
             case ELevel::debug:
             default:
-                std::cout << fmt::format(color, buffer);
+                std::cout << format();
                 break;
             }
         }
@@ -422,7 +414,7 @@ public:
         }
         auto _set = [&] {
             std::scoped_lock<std::recursive_mutex> lock(Logger::_m);
-            /* Global config */
+            /* Local config */
             switch (id) {
             case LoggerId::level:
                 _pool->level = std::any_cast<ELevel>(value);
@@ -451,7 +443,7 @@ public:
                 _pool->is_color = std::any_cast<bool>(value);
                 return true;
             }
-            /* Local config */
+            /* Global config */
             if (_pool->key.has_value() == false) {
                 return false;
             }

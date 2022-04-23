@@ -28,9 +28,14 @@ set(DEFAULT_DEPTH_LIMIT 10)
 set(DEFAULT_SYSOUT_FLAG 1)
 set(DEFAULT_SYSLOG_FLAG 0)
 set(DEFAULT_COLOR_FLAG 1)
+set(DEFAULT_NONE_COLOR white)
+set(DEFAULT_FATAL_COLOR fuchsia)
+set(DEFAULT_ERROR_COLOR orange_red)
+set(DEFAULT_WARN_COLOR yellow)
+set(DEFAULT_INFO_COLOR lime)
+set(DEFAULT_DEBUG_COLOR light_sea_green)
+set(DEFAULT_TRACE_COLOR gray)
 ```
-
-> This behavior will change in the future!
 
 ## How to build
 
@@ -66,16 +71,16 @@ After creating the logging object, some parameters can be changed\configured usi
  
 ```c++
 /* set error level */
-logf.set(LoggerId::level, ELevel::trace);
+log0.set(LoggerId::level, ELevel::trace);
 
 /* duplicate message in system log */
-logf.set(LoggerId::syslog, false);
+log0.set(LoggerId::syslog, false);
 
 /* duplicate message in standard output */
-logf.set(LoggerId::sysout, true);
+log0.set(LoggerId::sysout, true);
 
 /* set logger file size */
-logf.set(LoggerId::size, 1000000);
+log0.set(LoggerId::size, 1000000);
 
 /* log file storage depth */
 if (logf.set(LoggerId::depth, 32) == false) {
@@ -90,8 +95,6 @@ logf.set(LoggerId::color, true);
 
 Some parameters (`size`, `depth`) affect all objects that have the same `logfile`, the rest are individual for each object.
 
-~~When `depth` = 0, then the `logger` will work as a ring buffer, overwriting previous messages.~~
-
 When `size` = 0, log rotation will be disabled.
 
 You can create a message in three different ways, as you like:
@@ -100,13 +103,13 @@ You can create a message in three different ways, as you like:
 int id = 0;
 
 /* printf style (error) */
-logf.error("%s %s #%d", "hello", "world", ++id);
+log0.error("%s %s #%d", "hello", "world", ++id);
 
 /* ostream style (warning) */
-logf.warn() << "hello world #" << ++id << std::endl;
+log0.warn() << "hello world #" << ++id << std::endl;
 
 /* format style (debug) */
-logf.d("{:s} {:s} #{:d}", "hello", "world", ++id);
+log0.d("{:s} {:s} #{:d}", "hello", "world", ++id);
 ```
 
 Output:
@@ -124,6 +127,8 @@ Output:
  - If you want to get maximum performance, then you should disable `sysout` and `syslog`, make `size` as large as possible and `depth` as small as possible.
  
  - There is no need to close the log, it will happen automatically in case of successful completion of the program.
+
+ - Do not set `depth` = 0 as logger will reset all previous messages when `size` > 0 during log rotation.
 
 ## TODO:
  
