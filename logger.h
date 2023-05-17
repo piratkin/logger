@@ -66,12 +66,12 @@ Flags ERROR_LEVEL("level", 3U, [](auto v) { return v < 7U; });
 Flags SYSLOG_FLAG("fsyslog", false);
 Flags SYSOUT_FLAG("fsysout", true);
 Flags COLOR_FLAG("fcolor", true);
-Flags COLOR_NONE("color-none", 0xFFFFFFU);
-Flags COLOR_FATAL("color-fatal", 0xFF00FFU);
-Flags COLOR_ERROR("color-error", 0xFF4500U);
-Flags COLOR_WARN("color-warn", 0xFFFF00U);
-Flags COLOR_INFO("color-info", 0x00FF00U);
-Flags COLOR_DEBUG("color-debug", 0x20B2AAU);
+Flags COLOR_NONE("color-none",   0xffffffU);
+Flags COLOR_FATAL("color-fatal", 0xff00ffU);
+Flags COLOR_ERROR("color-error", 0xff4500U);
+Flags COLOR_WARN("color-warn",   0xffff00U);
+Flags COLOR_INFO("color-info",   0x00ff00U);
+Flags COLOR_DEBUG("color-debug", 0x1ca099U);
 Flags COLOR_TRACE("color-trace", 0x808080U);
 
 class Location {
@@ -179,14 +179,12 @@ public:
     }
     template<typename T>
     Stream& operator<<(T&& rhs) {
-        if (ptr != nullptr)
-            ss << rhs;
+        if (ptr != nullptr) ss << rhs;
         return *this;       
     }
     Stream& operator<<(std::ostream&(*rhs)(std::ostream&)) {
-        if (ptr != nullptr) {
+        if (ptr != nullptr)
             ptr->_print(level, src, ss.str());
-        }
         std::stringstream _ss;
         ss.swap(_ss);
         return *this;
@@ -383,7 +381,8 @@ class Logger : public ILogger {
             case ELevel::info:
             case ELevel::debug:
             default:
-                std::cout << format();
+                std::cout << format()
+                    << std::flush;
                 break;
             }
         }
@@ -400,7 +399,7 @@ class Logger : public ILogger {
             std::shared_ptr<StreamPool> sp) {
             if (sp != nullptr &&
                 sp->stream.is_open() == true) {
-                sp->stream << message;
+                sp->stream << message << std::flush;
                 sp->_size += message.size();
             }
             if (lp != nullptr &&
