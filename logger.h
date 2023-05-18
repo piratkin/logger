@@ -95,7 +95,19 @@ inline std::map<const ELevel, const std::tuple<const std::string,
     {ELevel::trace, {"TRACE", &COLOR_TRACE()}},
 };
 
-#ifdef _MSVC_
+#ifdef __linux__
+#include <syslog.h>
+inline std::map<const ELevel,
+    const int> syslevel{
+    {ELevel::none,  LOG_EMERG},
+    {ELevel::fatal, LOG_CRIT},
+    {ELevel::error, LOG_ERR},
+    {ELevel::warn,  LOG_WARNING},
+    {ELevel::info,  LOG_NOTICE},
+    {ELevel::debug, LOG_INFO},
+    {ELevel::trace, LOG_DEBUG},
+};
+#else
 #include <windows.h>
 inline std::map<const ELevel, 
     const uint16_t> syslevel { 
@@ -106,18 +118,6 @@ inline std::map<const ELevel,
     {ELevel::info,  EVENTLOG_INFORMATION_TYPE}, 
     {ELevel::debug, EVENTLOG_SUCCESS}, 
     {ELevel::trace, EVENTLOG_SUCCESS},
-};
-#else
-#include <syslog.h>
-inline std::map<const ELevel, 
-    const int> syslevel { 
-    {ELevel::none,  LOG_EMERG},
-    {ELevel::fatal, LOG_CRIT}, 
-    {ELevel::error, LOG_ERR}, 
-    {ELevel::warn,  LOG_WARNING},
-    {ELevel::info,  LOG_NOTICE}, 
-    {ELevel::debug, LOG_INFO}, 
-    {ELevel::trace, LOG_DEBUG},
 };
 #endif
 
@@ -142,7 +142,7 @@ public:
 /* logger pool */
 class LoggerPool {
 public:
-#ifdef _MSVC_
+#ifndef __linux__
     HANDLE handle;
 #endif
     ELevel level;
@@ -322,7 +322,10 @@ class Logger : public ILogger {
 
     void _sysprint(const ELevel level,
         const std::string& message) {
-#ifdef _MSVC_
+#ifdef __linux__
+        syslog(syslevel[level],
+            message.c_str());
+#else
         if (_pool->handle == INVALID_HANDLE_VALUE) {
             return;
         }
@@ -334,9 +337,6 @@ class Logger : public ILogger {
             0U, 0U, nullptr, 1, 0U,
             &_message,
             nullptr);
-#else
-        syslog(syslevel[level], 
-            message.c_str());
 #endif
     }
 
@@ -433,13 +433,13 @@ public:
             case LoggerId::syslog:
                 _pool->is_syslog = std::any_cast<bool>(value);
                 if (_pool->is_syslog == true) {
-#ifdef _MSVC_
+#ifdef __linux__
+                    openlog(PROGECT_NAME().c_str(), LOG_PID, LOG_USER);
+#else
                     _pool->handle = _pool->handle == INVALID_HANDLE_VALUE
                         ? ::OpenEventLogA(nullptr, 
                             LPCSTR{ PROGECT_NAME().c_str() })
                         : _pool->handle;
-#else
-                    openlog(PROGECT_NAME().c_str(), LOG_PID, LOG_USER);
 #endif
                 }
                 return true;
@@ -482,7 +482,7 @@ public:
         bool is_sysout = SYSOUT_FLAG(),
         bool is_color = COLOR_FLAG()) {
         _pool = std::make_shared<LoggerPool>(
-#ifdef _MSVC_
+#ifndef __linux__
             INVALID_HANDLE_VALUE,
 #endif
             level, std::nullopt, 
