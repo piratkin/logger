@@ -323,7 +323,7 @@ class Logger : public ILogger {
     void _sysprint(const ELevel level,
         const std::string& message) {
 #ifdef __linux__
-        syslog(syslevel[level],
+        syslog(syslevel[level], "%s",
             message.c_str());
 #else
         if (_pool->handle == INVALID_HANDLE_VALUE) {
