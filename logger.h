@@ -85,7 +85,7 @@ public:
 };
 
 inline std::map<const ELevel, const std::tuple<const std::string,
-    const unsigned* const>> infolevel {
+    const unsigned* const>> infoLevel {
     {ELevel::none,  {"NONE ", &COLOR_NONE()}},
     {ELevel::fatal, {"FATAL", &COLOR_FATAL()}},
     {ELevel::error, {"ERROR", &COLOR_ERROR()}},
@@ -323,8 +323,7 @@ class Logger : public ILogger {
     void _sysprint(const ELevel level,
         const std::string& message) {
 #ifdef __linux__
-        syslog(syslevel[level], "%s",
-            message.c_str());
+        syslog(syslevel[level], "%s", message.c_str());
 #else
         if (_pool->handle == INVALID_HANDLE_VALUE) {
             return;
@@ -356,16 +355,16 @@ class Logger : public ILogger {
             file.has_stem()) {
             name = file.stem().string();
         }
-        auto&& [strlevel, colorlevel] = infolevel[level];
+        auto&& [text, color] = infoLevel[level];
         std::string buffer = fmt::format(
-            "\n{:%F} {:%H:%M:%S} {:s} [{:s}@{:d}] {:s}", 
+            "{:%F} {:%H:%M:%S} {:s} [{:s}@{:d}] {:s}\n", 
             time, std::chrono::round<
                 std::chrono::milliseconds>(time.time_since_epoch()),
-            strlevel, name, src.line(), message);
+            text, name, src.line(), message);
         auto format = [&] () -> std::string {
             if (_pool->is_color == false) return buffer;
             return fmt::format(fmt::fg(
-                static_cast<fmt::color>(*colorlevel)), 
+                static_cast<fmt::color>(*color)), 
                     buffer);
         };
         if (_pool->is_sysout == true) {
@@ -381,7 +380,7 @@ class Logger : public ILogger {
             case ELevel::info:
             case ELevel::debug:
             default:
-                std::cout << format()
+                std::cout << format() 
                     << std::flush;
                 break;
             }
@@ -547,5 +546,4 @@ public:
     LOGGER_PRINT(i, info)
     LOGGER_PRINT(d, debug)
     LOGGER_PRINT(t, trace)
-
 };
