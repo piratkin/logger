@@ -1,6 +1,0 @@
-[submodule "lib/flags"]
-	path = lib/flags
-	url = https://github.com/piratkin/flags.git
-[submodule "lib/format/fmt"]
-	path = lib/format/fmt
-	url = https://github.com/fmtlib/fmt.git

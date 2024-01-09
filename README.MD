@@ -6,7 +6,7 @@
  - Use more than one instance
  - Minimum third-party dependencies
  - Cross-platform (`gcc`, `mingw`, `msvc`)
- - Modern (`c++20`)
+ - Modern (`c++23`)
  - Thread-safe
  - Header only
  - Simple integration (`cmake`)
@@ -117,3 +117,5 @@ Output:
  - [ ] Add samples, project structure
  - [ ] Stack trace
  - [ ] Local/UTC timestamp (log file only)
+ - [ ] Define the end of the stream implicitly
+ - [ ] Implement saving in sqlite.

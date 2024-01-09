@@ -17,18 +17,23 @@
 #include <sstream> /* stringstream */
 #include <source_location> /* source_location current */
 #include <tuple> /* tuple */
-#include <fmt/core.h>
-#include <fmt/chrono.h>
+
+#include <format>
 #include <fmt/color.h> /* fmt::color */
 #include <fmt/printf.h> /* fmt::sprntf */
-#include <fmt/format.h> /* fmt::format */
+
+/*
+ * TODO:
+ *  - [ ] Fix bug using pointer class Stream!
+ *  - [ ] Add switching between locale\system time
+ */
 
 #define LOGGER_FORMAT_PRINT(S, F) \
 template <class... Args> \
-void S(const Location& info, Args&&... args) { \
+void S(const Location& info, const Args&... args) { \
     _print(ELevel::F, info.src, \
-        fmt::vformat(info.format, fmt::make_format_args( \
-            std::forward<Args>(args)...))); \
+        std::vformat(info.format, std::make_format_args( \
+            std::forward<const Args&>(args)...))); \
 }
 
 #define LOGGER_SPRINT_PRINT(N) \
@@ -60,19 +65,21 @@ enum class ELevel : uint8_t {
 };
 
 DECLARE_string(PROGECT_NAME);
-Flags SIZE_LIMIT("size", 1048576ULL, [](auto v) { return v > 1024ULL; });
-Flags DEPTH_LIMIT("depth", 10U, [](auto v) { return v < 100U; });
-Flags ERROR_LEVEL("level", 3U, [](auto v) { return v < 7U; });
-Flags SYSLOG_FLAG("fsyslog", false);
-Flags SYSOUT_FLAG("fsysout", true);
-Flags COLOR_FLAG("fcolor", true);
-Flags COLOR_NONE("color-none",   0xffffffU);
-Flags COLOR_FATAL("color-fatal", 0xff00ffU);
-Flags COLOR_ERROR("color-error", 0xff4500U);
-Flags COLOR_WARN("color-warn",   0xffff00U);
-Flags COLOR_INFO("color-info",   0x00ff00U);
-Flags COLOR_DEBUG("color-debug", 0x1ca099U);
-Flags COLOR_TRACE("color-trace", 0x808080U);
+
+DECLARE_uint32(loggerDefaultSizeLimit);
+DECLARE_uint8(loggerDefaultDepthLimit);
+DECLARE_uint8(loggerDefaultErrorLevel);
+DECLARE_bool(loggerDefaultSyslogFlag);
+DECLARE_bool(loggerDefaultSysoutFlag);
+DECLARE_bool(loggerDefaultColorFlag);
+
+inline FLAGS_uint32(colorNone, 0xffffffU);
+inline FLAGS_uint32(colorFatal, 0xff00ffU);
+inline FLAGS_uint32(colorError, 0xff4500U);
+inline FLAGS_uint32(colorWarn, 0xffff00U);
+inline FLAGS_uint32(colorInfo, 0x00ff00U);
+inline FLAGS_uint32(colorDebug, 0x1ca099U);
+inline FLAGS_uint32(colorTrace, 0x808080U);
 
 class Location {
 public:
@@ -86,19 +93,19 @@ public:
 
 inline std::map<const ELevel, const std::tuple<const std::string,
     const unsigned* const>> infoLevel {
-    {ELevel::none,  {"NONE ", &COLOR_NONE()}},
-    {ELevel::fatal, {"FATAL", &COLOR_FATAL()}},
-    {ELevel::error, {"ERROR", &COLOR_ERROR()}},
-    {ELevel::warn,  {"WARN ", &COLOR_WARN()}},
-    {ELevel::info,  {"INFO ", &COLOR_INFO()}},
-    {ELevel::debug, {"DEBUG", &COLOR_DEBUG()}},
-    {ELevel::trace, {"TRACE", &COLOR_TRACE()}},
+    {ELevel::none,  {"NONE ", &colorNone()}},
+    {ELevel::fatal, {"FATAL", &colorFatal()}},
+    {ELevel::error, {"ERROR", &colorError()}},
+    {ELevel::warn,  {"WARN ", &colorWarn()}},
+    {ELevel::info,  {"INFO ", &colorInfo()}},
+    {ELevel::debug, {"DEBUG", &colorDebug()}},
+    {ELevel::trace, {"TRACE", &colorTrace()}},
 };
 
 #ifdef __linux__
 #include <syslog.h>
 inline std::map<const ELevel,
-    const int> syslevel{
+    const int> syslevel {
     {ELevel::none,  LOG_EMERG},
     {ELevel::fatal, LOG_CRIT},
     {ELevel::error, LOG_ERR},
@@ -197,7 +204,7 @@ class Logger : public ILogger {
     inline static std::jthread _worker;
     inline static std::condition_variable _event;
     inline static std::list<std::function<void()>> _queue;
-    inline static std::multimap<std::string,
+    inline static std::unordered_multimap<std::string,
         std::shared_ptr<StreamPool>> _cache;
     std::shared_ptr<LoggerPool> _pool;
     
@@ -219,8 +226,8 @@ class Logger : public ILogger {
                         std::fstream::app |
                         std::fstream::in |
                         std::fstream::out),
-                    .size = SIZE_LIMIT(),
-                    .depth = DEPTH_LIMIT(),
+                    .size = loggerDefaultSizeLimit(),
+                    .depth = loggerDefaultDepthLimit(),
                     ._size = _size,
                 }, [] (StreamPool* ptr) noexcept {
                     ptr->stream.flush();
@@ -298,8 +305,19 @@ class Logger : public ILogger {
                 return;
             }
         }
-    }    
-    
+    }
+
+    inline static ELevel toLevel(int level = -1) {
+        auto _level = level < 0
+            ? loggerDefaultErrorLevel()
+            : level;
+        if (auto ll = (int)ELevel::trace;
+            _level > ll) {
+            _level = ll;
+        }
+        return (ELevel)_level;
+    }
+
     inline static std::list<std::function<void()>> _read() noexcept {
         std::list<std::function<void()>> buffer(0);
         std::unique_lock<std::mutex> elock(Logger::_e);
@@ -356,18 +374,18 @@ class Logger : public ILogger {
             name = file.stem().string();
         }
         auto&& [text, color] = infoLevel[level];
-        std::string buffer = fmt::format(
+        std::string buffer = std::format(
             "{:%F} {:%H:%M:%S} {:s} [{:s}@{:d}] {:s}\n", 
             time, std::chrono::round<
                 std::chrono::milliseconds>(time.time_since_epoch()),
             text, name, src.line(), message);
         auto format = [&] () -> std::string {
-            if (_pool->is_color == false) return buffer;
+            if (!_pool->is_color) return buffer;
             return fmt::format(fmt::fg(
                 static_cast<fmt::color>(*color)), 
-                    buffer);
+                    "{}", buffer);
         };
-        if (_pool->is_sysout == true) {
+        if (_pool->is_sysout) {
             switch (level) {
             case ELevel::fatal:
                 std::cerr << format();
@@ -476,10 +494,10 @@ public:
         return false;
     }
 
-    Logger(ELevel level = ELevel::warn,
-        bool is_syslog = SYSLOG_FLAG(),
-        bool is_sysout = SYSOUT_FLAG(),
-        bool is_color = COLOR_FLAG()) {
+    Logger(ELevel level = toLevel(),
+        bool is_syslog = loggerDefaultSyslogFlag(),
+        bool is_sysout = loggerDefaultSysoutFlag(),
+        bool is_color = loggerDefaultColorFlag()) {
         _pool = std::make_shared<LoggerPool>(
 #ifndef __linux__
             INVALID_HANDLE_VALUE,
@@ -488,14 +506,13 @@ public:
             is_sysout, is_syslog, 
             is_color);
         set(LoggerId::syslog, is_syslog);
-
     }
 
-    Logger(std::filesystem::path file, 
-        ELevel level = ELevel::warn, 
-        bool is_syslog = SYSLOG_FLAG(),
-        bool is_sysout = SYSOUT_FLAG(),
-        bool is_color = COLOR_FLAG())
+    Logger(std::filesystem::path file,
+        ELevel level = toLevel(),
+        bool is_syslog = loggerDefaultSyslogFlag(),
+        bool is_sysout = loggerDefaultSysoutFlag(),
+        bool is_color = loggerDefaultColorFlag())
         : Logger(level, is_syslog, is_sysout) {
         std::error_code ec;
         if (std::filesystem::path dir = file.parent_path();
